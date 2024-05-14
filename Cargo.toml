@@ -1,7 +1,7 @@
 [package]
 name = "trading-client"
 description = "Wrapper for trading platform APIs with a focus on Alpaca."
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 
