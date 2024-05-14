@@ -1,6 +1,12 @@
 [package]
 name = "trading-client"
+description = "Wrapper for trading platform APIs with a focus on Alpaca."
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
+serde = { version = "1.0.201", features = ["derive"] }
+reqwest = { version = "0.12.4", features = ["json"] }
+serde_json = "1.0.117"
+async-trait = "0.1.80"
