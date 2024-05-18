@@ -1,8 +1,8 @@
-/* Immutable configuration object. */
+/// Immutable configuration object.
 pub struct Config {
-    pub alpaca_base_url: String,
     pub alpaca_api_key: String,
     pub alpaca_secret_key: String,
+    pub enable_real_trading: bool,
 }
 
 impl Config {
@@ -11,35 +11,35 @@ impl Config {
     }
 }
 
-/* Creates the final config object.  */
+/// Creates the final config object.
 #[derive(Default)]
 pub struct ConfigBuilder {
-    alpaca_base_url: String,
-    alpaca_api_key: String,
-    alpaca_secret_key: String,
+    alpaca_api_key: Option<String>,
+    alpaca_secret_key: Option<String>,
+    enable_real_trading: bool,
 }
 
 impl ConfigBuilder {
-    /// Determines whether the alpaca client is doing real or paper trading.
-    pub fn alpaca_base_url(mut self, alpaca_base_url: String) -> Self {
-        self.alpaca_base_url = alpaca_base_url;
-        self
-    }
     pub fn alpaca_api_key(mut self, alpaca_api_key: String) -> Self {
-        self.alpaca_api_key = alpaca_api_key;
+        self.alpaca_api_key = Some(alpaca_api_key);
         self
     }
 
     pub fn alpaca_secret_key(mut self, alpaca_secret_key: String) -> Self {
-        self.alpaca_secret_key = alpaca_secret_key;
+        self.alpaca_secret_key = Some(alpaca_secret_key);
         self
     }
 
-    pub fn build(self) -> Config {
-        Config {
-            alpaca_base_url: self.alpaca_base_url,
-            alpaca_api_key: self.alpaca_api_key,
-            alpaca_secret_key: self.alpaca_secret_key,
-        }
+    pub fn enable_real_trading(mut self, enable_real_trading: bool) -> Self {
+        self.enable_real_trading = enable_real_trading;
+        self
+    }
+
+    pub fn build(self) -> Result<Config, &'static str> {
+        Ok(Config {
+            alpaca_api_key: self.alpaca_api_key.ok_or("API key must be set")?,
+            alpaca_secret_key: self.alpaca_secret_key.ok_or("Secret key must be set")?,
+            enable_real_trading: self.enable_real_trading,
+        })
     }
 }
