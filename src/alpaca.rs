@@ -5,6 +5,11 @@ use crate::datastructures::order::Order;
 use async_trait::async_trait;
 use reqwest::{header::HeaderMap, Client as HttpClient};
 
+use futures_util::{SinkExt, StreamExt};
+use serde_json::json;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use url::Url; // Importing the required traits
+
 pub struct AlpacaClient {
     http_client: HttpClient,
     base_url: String,
@@ -65,4 +70,89 @@ impl TradingClient for AlpacaClient {
         let asset: Asset = serde_json::from_str(&response)?;
         Ok(asset)
     }
+
+    async fn subscribe_to_data(&self, symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let api_url = format!("wss://data.alpaca.markets/stream");
+        let url = Url::parse(&api_url).expect("Invalid URL");
+
+        let (mut socket, response) = connect_async(url).await.expect("Failed to connect");
+        println!("Connected to the server: {:?}", response);
+
+        // Authenticate with your API key
+        let auth_message = json!({
+            "action": "authenticate",
+            "data": {
+                "key_id": self.api_key,
+                "secret_key": self.secret_key  // Adjust according to actual required authentication schema
+            }
+        });
+        socket.send(Message::Text(auth_message.to_string())).await?;
+
+        // Subscribe to minutely updates for the specified symbol
+        let subscribe_message = json!({
+            "action": "listen",
+            "data": {
+                "streams": [format!("AM.{}", symbol)]
+            }
+        });
+        socket
+            .send(Message::Text(subscribe_message.to_string()))
+            .await?;
+
+        // Listening to the messages
+        while let Some(message) = socket.next().await {
+            let msg = message?;
+            match msg {
+                Message::Text(text) => println!("Received: {}", text),
+                Message::Binary(bin) => println!("Received binary data: {:?}", bin),
+                _ => (),
+            }
+        }
+
+        Ok(())
+    }
+
+    // async fn subscribe_to_data(
+    //     api_key: &str,
+    //     symbol: &str,
+    // ) -> tokio_tungstenite::tungstenite::Result<()> {
+    //     let api_url = format!("wss://data.alpaca.markets/stream");
+    //     let url = Url::parse(&api_url).expect("Invalid URL");
+
+    //     let (mut socket, response) = connect_async(url).await.expect("Failed to connect");
+    //     println!("Connected to the server: {:?}", response);
+
+    //     // Authenticate with your API key
+    //     let auth_message = json!({
+    //         "action": "authenticate",
+    //         "data": {
+    //             "key_id": api_key,
+    //             "secret_key": api_key  // Adjust according to actual required authentication schema
+    //         }
+    //     });
+    //     socket.send(Message::Text(auth_message.to_string())).await?;
+
+    //     // Subscribe to minutely updates for the specified symbol
+    //     let subscribe_message = json!({
+    //         "action": "listen",
+    //         "data": {
+    //             "streams": [format!("AM.{}", symbol)]
+    //         }
+    //     });
+    //     socket
+    //         .send(Message::Text(subscribe_message.to_string()))
+    //         .await?;
+
+    //     // Listening to the messages
+    //     while let Some(message) = socket.next().await {
+    //         let msg = message?;
+    //         match msg {
+    //             Message::Text(text) => println!("Received: {}", text),
+    //             Message::Binary(bin) => println!("Received binary data: {:?}", bin),
+    //             _ => (),
+    //         }
+    //     }
+
+    //     Ok(())
+    // }
 }
