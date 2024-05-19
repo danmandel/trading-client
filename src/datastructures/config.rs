@@ -30,6 +30,7 @@ impl ConfigBuilder {
         self
     }
 
+    /// If true, the client will trade using real money. Only enable when there is a reasonable expectation of being profitable.
     pub fn enable_real_trading(mut self, enable_real_trading: bool) -> Self {
         self.enable_real_trading = enable_real_trading;
         self
