@@ -6,8 +6,20 @@ use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{header::HeaderMap, Client as HttpClient};
 use serde_json::{json, to_string_pretty};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{ MaybeTlsStream, WebSocketStream};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
+
+pub struct SubScriptionRequest {
+    pub action: &'static str,
+    pub trades: Vec<&'static str>,
+    pub quotes: Vec<&'static str>,
+    pub bars: Vec<&'static str>,
+    pub updated_bars: Vec<&'static str>, // camelcase?
+    pub daily_bars: Vec<&'static str>, // camelcase?
+    pub orderbooks: Vec<&'static str>
+}
 
 fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> &'static str {
     match feed_type {
@@ -16,7 +28,8 @@ fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> &'static str {
             if enable_real_trading {
                 "wss://api.alpaca.markets/stream" // "wss://stream.data.alpaca.markets/v2/iex"
             } else {
-                "wss://stream.data.alpaca.markets/v2/test" // "wss://paper-api.alpaca.markets/stream" // "wss://paper-stream.data.alpaca.markets/v2/iex"
+                //"wss://stream.data.alpaca.markets/v2/test" 
+                "wss://paper-api.alpaca.markets/stream" // "wss://paper-stream.data.alpaca.markets/v2/iex"
             }
         }
         // Docs: https://docs.alpaca.markets/docs/real-time-crypto-pricing-data
@@ -73,7 +86,8 @@ impl TradingClient for AlpacaClient {
             enable_real_trading: config.enable_real_trading,
         }
     }
-
+ 
+    // TODO: what if order was its own struct that had adjust_for_confidence and adjust_for_kelly_criteron
     async fn create_order(&self, order: &Order) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!("{}/v2/orders", self.base_url);
         let mut headers = HeaderMap::new();
@@ -103,7 +117,7 @@ impl TradingClient for AlpacaClient {
         &self,
         symbol: &str,
         feed_type: FeedType,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn std::error::Error>> {
         let ws_url = get_ws_url(feed_type, self.enable_real_trading);
         let url = Url::parse(ws_url)?;
 
@@ -140,34 +154,24 @@ impl TradingClient for AlpacaClient {
             }
         }
 
+
         // Subscribe to minutely updates for the specified symbol.
         let subscribe_message = json!({
             "action": "subscribe",
-            "bars": ["AAPL"]
+            "bars": ["AAPL"],
+            "trades": ["AAPL"],
+            "quotes": ["AAPL"],
+            "daily_bars": ["AAPL"]            
         });
 
-        // let message_string = subscribe_message.to_string();
-
         let message_string = to_string_pretty(&subscribe_message)?;
-        println!("Serialized JSON: {}", message_string);
         println!("Serialized JSON: {}", message_string);
 
         socket
             .send(Message::Text(subscribe_message.to_string()))
             .await?;
 
-        while let Some(message) = socket.next().await {
-            let msg = message?;
-
-            // NOTE: The trade_updates stream coming from paper ws stream use binary frames, unlike the text frames that come from the real trading ws stream.
-            match msg {
-                Message::Text(text) => println!("Received: {}", text),
-                Message::Binary(bin) => println!("Received binary data: {:?}", bin),
-                _ => (),
-            }
-        }
-
-        Ok(())
+        Ok(socket)
     }
 
     async fn get_asset(&self, symbol: &str) -> Result<Asset, Box<dyn std::error::Error>> {
@@ -191,89 +195,4 @@ impl TradingClient for AlpacaClient {
         let asset: Asset = serde_json::from_str(&response)?;
         Ok(asset)
     }
-
-    // async fn subscribe_to_data(&self, symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
-    //     let api_url = format!("wss://data.alpaca.markets/stream");
-    //     let url = Url::parse(&api_url).expect("Invalid URL");
-
-    //     let (mut socket, response) = connect_async(url).await.expect("Failed to connect");
-    //     println!("Connected to the server: {:?}", response);
-
-    //     // Authenticate with your API key
-    //     let auth_message = json!({
-    //         "action": "authenticate",
-    //         "data": {
-    //             "key_id": self.api_key,
-    //             "secret_key": self.secret_key  // Adjust according to actual required authentication schema
-    //         }
-    //     });
-    //     socket.send(Message::Text(auth_message.to_string())).await?;
-
-    //     // Subscribe to minutely updates for the specified symbol
-    //     let subscribe_message = json!({
-    //         "action": "listen",
-    //         "data": {
-    //             "streams": [format!("AM.{}", symbol)]
-    //         }
-    //     });
-    //     socket
-    //         .send(Message::Text(subscribe_message.to_string()))
-    //         .await?;
-
-    //     // Listening to the messages
-    //     while let Some(message) = socket.next().await {
-    //         let msg = message?;
-    //         match msg {
-    //             Message::Text(text) => println!("Received: {}", text),
-    //             Message::Binary(bin) => println!("Received binary data: {:?}", bin),
-    //             _ => (),
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
-    // async fn subscribe_to_data(
-    //     api_key: &str,
-    //     symbol: &str,
-    // ) -> tokio_tungstenite::tungstenite::Result<()> {
-    //     let api_url = format!("wss://data.alpaca.markets/stream");
-    //     let url = Url::parse(&api_url).expect("Invalid URL");
-
-    //     let (mut socket, response) = connect_async(url).await.expect("Failed to connect");
-    //     println!("Connected to the server: {:?}", response);
-
-    //     // Authenticate with your API key
-    //     let auth_message = json!({
-    //         "action": "authenticate",
-    //         "data": {
-    //             "key_id": api_key,
-    //             "secret_key": api_key  // Adjust according to actual required authentication schema
-    //         }
-    //     });
-    //     socket.send(Message::Text(auth_message.to_string())).await?;
-
-    //     // Subscribe to minutely updates for the specified symbol
-    //     let subscribe_message = json!({
-    //         "action": "listen",
-    //         "data": {
-    //             "streams": [format!("AM.{}", symbol)]
-    //         }
-    //     });
-    //     socket
-    //         .send(Message::Text(subscribe_message.to_string()))
-    //         .await?;
-
-    //     // Listening to the messages
-    //     while let Some(message) = socket.next().await {
-    //         let msg = message?;
-    //         match msg {
-    //             Message::Text(text) => println!("Received: {}", text),
-    //             Message::Binary(bin) => println!("Received binary data: {:?}", bin),
-    //             _ => (),
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
 }

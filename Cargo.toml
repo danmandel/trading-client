@@ -11,6 +11,6 @@ reqwest = { version = "0.12.4", features = ["json"] }
 serde_json = "1.0.117"
 async-trait = "0.1.80"
 tokio = { version = "1.36.0", features = ["full"] }
-tokio-tungstenite = "0.21.0"
+tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
 url = "2.5.0"
 futures-util = "0.3.30"
