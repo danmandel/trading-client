@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use crate::datastructures::asset::Asset;
 use crate::datastructures::client::{FeedType, SubscriptionRequest, TradingClient};
 use crate::datastructures::config::Config;
@@ -112,27 +114,22 @@ impl TradingClient for AlpacaClient {
 
     // async fn close_order();
     // async fn close_all_orders();
+
+    /// Docs: https://docs.alpaca.markets/docs/streaming-market-data
     async fn subscribe(
         &self,
         request: SubscriptionRequest,
         feed_type: FeedType,
-    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn std::error::Error>> {
-        let ws_url = get_ws_url(feed_type, self.enable_real_trading);
-        let url = Url::parse(&ws_url)?;
-
-        println!("key {:?}", self.api_key);
-        println!("secret {:?}", self.secret_key);
-        println!("base {:?}", self.base_url);
-        println!("ws {:?}", ws_url);
-
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn Error>> {
+        let url = Url::parse(&get_ws_url(feed_type, self.enable_real_trading))?;
 
         let (mut socket, response) = connect_async(url).await?;
 
         if response.status() != 101 {
-            eprintln!("Failed to connect, status code: {}", response.status());
-            return Err("Connection failed with non-101 status code".into());
+            return Err(
+                format!("Connection failed with status code: {}", response.status()).into(),
+            );
         }
-        println!("Connected to the server: {:?}", response);
 
         let auth_message = json!({
             "action": "auth",
@@ -142,101 +139,30 @@ impl TradingClient for AlpacaClient {
 
         socket.send(Message::Text(auth_message.to_string())).await?;
 
-        // Waiting for authentication response
-        while let Some(message) = socket.next().await {
+        if let Some(message) = socket.next().await {
             match message? {
                 Message::Text(text) => {
-                    println!("Authentication response: {}", text);
+                    println!("Authentication Response: {}", text);
                     if text.contains("unauthorized") || text.contains("error") {
                         return Err("Authentication failed".into());
-                    } else if text.contains("authenticated") {
-                        break; // Exit the loop if authentication is successful
+                    } else if !text.contains("success") {
+                        return Err("Unexpected authentication response".into());
                     }
                 }
-                _ => (), // Handle other message types if necessary
+                _ => {
+                    return Err("Unexpected non-text message received during authentication".into())
+                }
             }
+        } else {
+            return Err("No authentication response received".into());
         }
 
-        let subscription_request = json!(request);
-
         socket
-            .send(Message::Text(subscription_request.to_string()))
+            .send(Message::Text(json!(request).to_string()))
             .await?;
 
         Ok(socket)
     }
-
-    /// Docs: https://docs.alpaca.markets/docs/streaming-market-data
-    // async fn subscribe(
-    //     &self,
-    //     request: SubscriptionRequest,
-    //     feed_type: FeedType,
-    // ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn std::error::Error>> {
-    //     let ws_url = get_ws_url(feed_type, self.enable_real_trading);
-    //     let url = Url::parse(&ws_url)?;
-
-    //     let (mut socket, response) = connect_async(url).await?;
-
-    //     if response.status() != 101 {
-    //         eprintln!("Failed to connect, status code: {}", response.status());
-    //         return Err("Connection failed with non-101 status code".into());
-    //     }
-
-    //     println!("Connected to the server: {:?}", response);
-
-    //     // Authenticate with your API key
-    //     let auth_message = json!({
-    //         "action": "authenticate",
-    //         "data": {
-    //             "key_id": self.api_key,
-    //             "secret_key": self.secret_key
-    //         }
-    //     });
-
-    //     socket.send(Message::Text(auth_message.to_string())).await?;
-
-    //     // Waiting for authentication response
-    //     if let Some(message) = socket.next().await {
-    //         match message? {
-    //             Message::Text(text) => {
-    //                 println!("Authentication response: {}", text);
-    //                 if text.contains("unauthorized") || text.contains("error") {
-    //                     return Err("Authentication failed".into());
-    //                 }
-    //                 // Authentication successful, proceed with subscription
-    //                 let subscription_request = json!(request);
-    //                 let message_string = to_string_pretty(&subscription_request)?;
-    //                 println!("Serialized JSON: {}", message_string);
-    //                 socket
-    //                     .send(Message::Binary(
-    //                         subscription_request.to_string().into_bytes(),
-    //                     ))
-    //                     .await?;
-    //             }
-    //             _ => {
-    //                 return Err("Unexpected authentication response".into());
-    //             }
-    //         }
-    //     } else {
-    //         return Err("No authentication response received".into());
-    //     }
-
-    //     // let subscription_request = json!(request);
-
-    //     // let message_string = to_string_pretty(&subscription_request)?;
-    //     // println!("Serialized JSON: {}", message_string);
-
-    //     // socket
-    //     // // .send(Message::Text(
-    //     // //     subscription_request.to_string(),
-    //     // // ))
-    //     //     .send(Message::Binary(
-    //     //         subscription_request.to_string().into_bytes(),
-    //     //     ))
-    //     //     .await?;
-
-    //     Ok(socket)
-    // }
 
     async fn get_asset(&self, symbol: &str) -> Result<Asset, Box<dyn std::error::Error>> {
         let url = format!("{}/v2/assets/{}", self.base_url, symbol);
