@@ -21,11 +21,11 @@ pub struct SubscriptionRequest {
     pub action: &'static str,
     /// Array of ticker symbols ex. ["AAPL"] or ["BTC"]
     pub trades: Vec<&'static str>,
-    // pub quotes: Vec<&'static str>,
-    // pub bars: Vec<&'static str>,
-    // pub updated_bars: Vec<&'static str>, // camelcase?
-    // pub daily_bars: Vec<&'static str>,   // camelcase?
-    // pub orderbooks: Vec<&'static str>,
+    pub quotes: Vec<&'static str>,
+    pub bars: Vec<&'static str>,
+    pub updated_bars: Vec<&'static str>, // camelcase?
+    pub daily_bars: Vec<&'static str>,   // camelcase?
+    pub orderbooks: Vec<&'static str>,
 }
 
 pub struct SubscriptionRequestBuilder {
@@ -83,11 +83,11 @@ impl SubscriptionRequestBuilder {
         SubscriptionRequest {
             action: "subscribe",
             trades: self.trades,
-            // quotes: self.quotes,
-            // bars: self.bars,
-            // updated_bars: self.updated_bars,
-            // daily_bars: self.daily_bars,
-            // orderbooks: self.orderbooks,
+            quotes: self.quotes,
+            bars: self.bars,
+            updated_bars: self.updated_bars,
+            daily_bars: self.daily_bars,
+            orderbooks: self.orderbooks,
         }
     }
 }
