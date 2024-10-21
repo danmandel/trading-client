@@ -11,6 +11,9 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use url::Url;
 
+// Alpaca uses the same WebSocket API for both live and paper trading accounts when it comes to market data (IEX or SIP).
+// The WebSocket endpoints for real-time market data do not differentiate between paper and live trading environments.
+// The distinction between paper and live trading applies to order placement, not data streaming.
 fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> String {
     let src = "iex"; // "sip" requires subscription
 
@@ -20,7 +23,7 @@ fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> String {
             if enable_real_trading {
                 format!("wss://stream.data.alpaca.markets/v2/{src}")
             } else {
-                format!("wss://stream.data.sandbox.alpaca.markets/v2/{src}")
+                format!("wss://stream.data.alpaca.markets/v2/{src}")
             }
         }
         // Docs: https://docs.alpaca.markets/docs/real-time-crypto-pricing-data
@@ -28,7 +31,7 @@ fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> String {
             if enable_real_trading {
                 format!("wss://stream.data.alpaca.markets/v1beta3/crypto/us")
             } else {
-                format!("wss://stream.data.sandbox.alpaca.markets/v1beta3/crypto/us")
+                format!("wss://stream.data.alpaca.markets/v1beta3/crypto/us")
             }
         }
         // Docs: https://docs.alpaca.markets/docs/streaming-real-time-news
@@ -45,7 +48,6 @@ fn get_ws_url(feed_type: FeedType, enable_real_trading: bool) -> String {
                 format!("wss://stream.data.alpaca.markets/v1beta1/{src}")
             } else {
                 format!("wss://stream.data.sandbox.alpaca.markets/v1beta1/{src}")
-                // TODO: Substitute indicative or opra to {feed} depending on your subscription.
             }
         }
         FeedType::Test => {
@@ -110,7 +112,6 @@ impl TradingClient for AlpacaClient {
 
     // async fn close_order();
     // async fn close_all_orders();
-
     async fn subscribe(
         &self,
         request: SubscriptionRequest,
@@ -118,38 +119,36 @@ impl TradingClient for AlpacaClient {
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn std::error::Error>> {
         let ws_url = get_ws_url(feed_type, self.enable_real_trading);
         let url = Url::parse(&ws_url)?;
+
+        println!("key {:?}", self.api_key);
+        println!("secret {:?}", self.secret_key);
+        println!("base {:?}", self.base_url);
+        println!("ws {:?}", ws_url);
+
+
         let (mut socket, response) = connect_async(url).await?;
-    
+
         if response.status() != 101 {
             eprintln!("Failed to connect, status code: {}", response.status());
             return Err("Connection failed with non-101 status code".into());
         }
-    
         println!("Connected to the server: {:?}", response);
-        println!("key {:?}", self.api_key);
-        println!("secret {:?}", self.secret_key);
-        println!("base {:?}", self.base_url);
-    
-        // Authenticate with your API key
+
         let auth_message = json!({
-            "action": "authenticate",
-            "data": {
-                "key_id": self.api_key,
-                "secret_key": self.secret_key // Ensure these are correctly formatted
-            }
+            "action": "auth",
+            "key": self.api_key,
+            "secret": self.secret_key
         });
 
-
-    
         socket.send(Message::Text(auth_message.to_string())).await?;
-    
+
         // Waiting for authentication response
         while let Some(message) = socket.next().await {
             match message? {
                 Message::Text(text) => {
                     println!("Authentication response: {}", text);
                     if text.contains("unauthorized") || text.contains("error") {
-                        return Err("!!Authentication failed".into());
+                        return Err("Authentication failed".into());
                     } else if text.contains("authenticated") {
                         break; // Exit the loop if authentication is successful
                     }
@@ -157,15 +156,13 @@ impl TradingClient for AlpacaClient {
                 _ => (), // Handle other message types if necessary
             }
         }
-    
+
         let subscription_request = json!(request);
-        let message_string = to_string_pretty(&subscription_request)?;
-        println!("Serialized JSON: {}", message_string);
-    
-        // socket
-        //     .send(Message::Text(subscription_request.to_string()))
-        //     .await?;
-    
+
+        socket
+            .send(Message::Text(subscription_request.to_string()))
+            .await?;
+
         Ok(socket)
     }
 
@@ -192,7 +189,7 @@ impl TradingClient for AlpacaClient {
     //         "action": "authenticate",
     //         "data": {
     //             "key_id": self.api_key,
-    //             "secret_key": self.secret_key  // Ensure these are correctly formatted
+    //             "secret_key": self.secret_key
     //         }
     //     });
 
