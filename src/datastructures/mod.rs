@@ -3,3 +3,4 @@ pub mod client;
 pub mod config;
 pub mod market;
 pub mod order;
+pub mod event;
