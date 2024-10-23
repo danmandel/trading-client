@@ -1,3 +1,8 @@
+use serde::de::Error as SerdeError;
+use serde::Deserialize;
+use serde_json::Error;
+use std::fmt;
+
 #[derive(Debug, Clone)]
 pub enum EventType {
     Trade {
@@ -49,10 +54,6 @@ pub enum EventType {
     },
 }
 
-use serde::de::Error as SerdeError;
-use serde::Deserialize;
-use serde_json::Error;
-
 impl EventType {
     pub fn from_str(s: &str) -> Result<Self, Error> {
         #[derive(Deserialize)]
@@ -100,6 +101,31 @@ impl EventType {
                 timestamp: event.t.clone(),
             }),
             _ => Err(SerdeError::custom("Unknown event type")),
+        }
+    }
+}
+
+impl fmt::Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EventType::Trade { symbol, price, volume, timestamp } => {
+                write!(f, "Trade: symbol={}, price={}, volume={}, timestamp={}", symbol, price, volume, timestamp)
+            }
+            EventType::Quote { symbol, bid_price, ask_price, bid_size, ask_size, timestamp } => {
+                write!(f, "Quote: symbol={}, bid_price={}, ask_price={}, bid_size={}, ask_size={}, timestamp={}", symbol, bid_price, ask_price, bid_size, ask_size, timestamp)
+            }
+            EventType::Bar { symbol, open, high, low, close, volume, timestamp } => {
+                write!(f, "Bar: symbol={}, open={}, high={}, low={}, close={}, volume={}, timestamp={}", symbol, open, high, low, close, volume, timestamp)
+            }
+            EventType::UpdatedBar { symbol, open, high, low, close, volume, timestamp } => {
+                write!(f, "UpdatedBar: symbol={}, open={}, high={}, low={}, close={}, volume={}, timestamp={}", symbol, open, high, low, close, volume, timestamp)
+            }
+            EventType::DailyBar { symbol, open, high, low, close, volume, timestamp } => {
+                write!(f, "DailyBar: symbol={}, open={}, high={}, low={}, close={}, volume={}, timestamp={}", symbol, open, high, low, close, volume, timestamp)
+            }
+            EventType::OrderBook { symbol, bids, asks, timestamp } => {
+                write!(f, "OrderBook: symbol={}, bids={:?}, asks={:?}, timestamp={}", symbol, bids, asks, timestamp)
+            }
         }
     }
 }
