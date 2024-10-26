@@ -1,8 +1,4 @@
-use super::{
-    asset::Asset,
-    config::Config,
-    order::{Order, OrderResponse},
-};
+use super::{asset::Asset, config::Config, order::Order};
 use async_trait::async_trait;
 use serde::Serialize;
 use tokio::net::TcpStream;
@@ -15,6 +11,68 @@ pub enum FeedType {
     Options,
     Test,
 }
+
+pub struct SubscriptionParams {
+    pub feed_type: FeedType,
+    pub subscription_request: SubscriptionRequest,
+}
+
+pub struct SubscriptionParamsBuilder {
+    feed_type: Option<FeedType>,
+    subscription_request: SubscriptionRequestBuilder,
+}
+
+impl SubscriptionParamsBuilder {
+    pub fn new() -> Self {
+        SubscriptionParamsBuilder {
+            feed_type: None,
+            subscription_request: SubscriptionRequestBuilder::new(),
+        }
+    }
+
+    pub fn feed_type(mut self, feed_type: FeedType) -> Self {
+        self.feed_type = Some(feed_type);
+        self
+    }
+
+    pub fn trades(mut self, trades: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.trades(trades);
+        self
+    }
+
+    pub fn quotes(mut self, quotes: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.quotes(quotes);
+        self
+    }
+
+    pub fn bars(mut self, bars: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.bars(bars);
+        self
+    }
+
+    pub fn updated_bars(mut self, updated_bars: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.updated_bars(updated_bars);
+        self
+    }
+
+    pub fn daily_bars(mut self, daily_bars: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.daily_bars(daily_bars);
+        self
+    }
+
+    pub fn orderbooks(mut self, orderbooks: &[&'static str]) -> Self {
+        self.subscription_request = self.subscription_request.orderbooks(orderbooks);
+        self
+    }
+
+    pub fn build(self) -> SubscriptionParams {
+        SubscriptionParams {
+            feed_type: self.feed_type.expect("FeedType is required"),
+            subscription_request: self.subscription_request.build(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct SubscriptionRequest {
     /// Always "subscribe"
@@ -27,7 +85,6 @@ pub struct SubscriptionRequest {
     pub daily_bars: Vec<&'static str>,   // camelcase?
     pub orderbooks: Vec<&'static str>,
 }
-
 pub struct SubscriptionRequestBuilder {
     trades: Vec<&'static str>,
     quotes: Vec<&'static str>,
@@ -101,7 +158,6 @@ pub trait TradingClient {
     async fn get_asset(&self, symbol: &str) -> Result<Asset, Box<dyn std::error::Error>>;
     async fn subscribe(
         &self,
-        request: SubscriptionRequest,
-        feed_type: FeedType,
+        params: SubscriptionParams,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn std::error::Error>>;
 }

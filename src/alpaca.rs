@@ -1,16 +1,18 @@
-use std::error::Error;
-
-use crate::datastructures::asset::Asset;
-use crate::datastructures::client::{FeedType, SubscriptionRequest, TradingClient};
-use crate::datastructures::config::Config;
-use crate::datastructures::order::Order;
+use crate::datastructures::{
+    asset::Asset,
+    client::{FeedType, SubscriptionParams, TradingClient},
+    config::Config,
+    order::Order,
+};
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{header::HeaderMap, Client as HttpClient};
-use serde_json::{json, to_string_pretty};
+use serde_json::json;
+use std::error::Error;
 use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
+};
 use url::Url;
 
 // Alpaca uses the same WebSocket API for both live and paper trading accounts when it comes to market data (IEX or SIP).
@@ -109,6 +111,24 @@ impl TradingClient for AlpacaClient {
             .await?;
 
         println!("Create Order Response: {}", response);
+
+        // Insert order details into the postgres database. Consider using SQLite instead.
+        // let (client, connection) =
+        //     tokio_postgres::connect("host=localhost user=postgres password=secret dbname=orders", tokio_postgres::NoTls).await?;
+
+        // // The connection object performs the actual communication with the database,
+        // // so spawn it off to run on its own.
+        // tokio::spawn(async move {
+        //     if let Err(e) = connection.await {
+        //         eprintln!("connection error: {}", e);
+        //     }
+        // });
+
+        // client.execute(
+        //     "INSERT INTO orders (symbol, quantity, order_type, time_in_force) VALUES ($1, $2, $3, $4)",
+        //     &[&order.symbol, &order.quantity, &format!("{:?}", order.order_type), &order.time_in_force],
+        // ).await?;
+
         Ok(())
     }
 
@@ -118,10 +138,9 @@ impl TradingClient for AlpacaClient {
     /// Docs: https://docs.alpaca.markets/docs/streaming-market-data
     async fn subscribe(
         &self,
-        request: SubscriptionRequest,
-        feed_type: FeedType,
+        params: SubscriptionParams,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Box<dyn Error>> {
-        let url = Url::parse(&get_ws_url(feed_type, self.enable_real_trading))?;
+        let url = Url::parse(&get_ws_url(params.feed_type, self.enable_real_trading))?;
 
         let (mut socket, response) = connect_async(url).await?;
 
@@ -158,7 +177,9 @@ impl TradingClient for AlpacaClient {
         }
 
         socket
-            .send(Message::Text(json!(request).to_string()))
+            .send(Message::Text(
+                json!(params.subscription_request).to_string(),
+            ))
             .await?;
 
         Ok(socket)
